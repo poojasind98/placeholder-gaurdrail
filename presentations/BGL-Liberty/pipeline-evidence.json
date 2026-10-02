@@ -1,0 +1,991 @@
+{
+  "generated_at": "2026-09-29T16:16:09.705194+00:00",
+  "datasets": {
+    "BGL": {
+      "dataset": "BGL",
+      "stages": [
+        {
+          "title": "Where the pipeline starts",
+          "owner": "",
+          "explanation": "The complete workflow starts with public raw system logs. Dataset preparation creates labeled training and test sequences. Our current evaluation starts later, with the authors\u2019 prepared test.csv and an existing checkpoint.",
+          "blocks": [
+            {
+              "label": "Complete workflow described by the repository",
+              "text": "Original public log archive\n  \u2193 download and extract\nRaw log records\n  \u2193 parse fields and convert reference labels\nStructured records\n  \u2193 first 80% / remaining 20% split\nSeparate training and test records\n  \u2193 group each split into message sequences\ntrain.csv                         test.csv\n  \u2193 fine-tuning                     \u2193 inference with saved weights\nAdapters + projection weights \u2500\u2500\u2500\u2192 Predictions\n                                    \u2193 compare with reference labels\n                                  Metrics"
+            },
+            {
+              "label": "What we actually ran locally",
+              "text": "Authors\u2019 prepared BGL test.csv\n  \u2193 select first 10 normal + first 10 anomalous\nsmoke-mixed.csv\n  \u2193 normalize \u2192 tokenize \u2192 BERT \u2192 projection \u2192 Llama\nPredictions and evaluation files\n\nLoaded checkpoint: ft_model_BGL\nRaw-source excerpts: separate parsing illustrations\nFull raw-data preparation and training: not rerun for this presentation"
+            }
+          ],
+          "links": [
+            {
+              "label": "Original description",
+              "url": "https://github.com/logpai/loghub/tree/master/BGL"
+            },
+            {
+              "label": "Original download",
+              "url": "https://zenodo.org/records/8196385/files/BGL.zip?download=1"
+            },
+            {
+              "label": "Prepared test",
+              "url": "https://drive.google.com/file/d/1aMKzhrLklnk5RX78UBc3Zx3voIIGnQzo/view"
+            },
+            {
+              "label": "LogLLM authors\u2019 preparation and test links",
+              "url": "https://github.com/guanwei49/LogLLM"
+            }
+          ],
+          "command": "python presentation_walkthrough.py sources --dataset BGL",
+          "say": "What I am explaining: the beginning of the full workflow and where our current experiment enters it.\n\n\u201cThe original input is a public collection of records written by the BGL system. Those records must be prepared before this model can train or evaluate on them. Preparation extracts the message fields, converts reference labels, divides records into training and test portions, and groups messages into sequences.\n\nThe training branch uses train.csv to learn adapter and projection weights. The evaluation branch uses test.csv with saved weights to generate predictions. The test labels are used afterward to check correctness, not supplied as answers during inference.\n\nFor our local demonstration, we downloaded the authors\u2019 prepared test.csv and selected twenty sequences. We loaded the existing dataset-specific checkpoint. We did not regenerate the full training/test files or retrain the models during this presentation. The next sections explain both the original preparation process and the actual steps we executed.\u201d\n\nPoint to: the two branches in the complete workflow, then the starting point in our local workflow.\n\nTransition: \u201cFirst, here are the original dataset links and the prepared file we downloaded.\u201d"
+        },
+        {
+          "title": "Source data and the file used today",
+          "owner": "Pooja",
+          "explanation": "BGL has 9,427 prepared test sequences locally. Our presentation uses the first 10 normal and first 10 anomalous sequences. Original logs, prepared CSVs, and our selected sample are different artifacts.",
+          "say": "What I am explaining: where our data comes from and exactly what this experiment uses.\n\n\u201cWe are working with BGL, a public collection of logs from the Blue Gene/L supercomputer. A log is a text record of a system event. A dataset is a collection of these records. Our source links distinguish the original logs from the prepared test CSV published by the LogLLM authors.\n\nWe begin inference with that prepared CSV. We selected the first ten normal and first ten anomalous sequences, retaining their original CSV row numbers. This deliberately balanced sample makes both classes visible in a short demonstration. It is not a random sample, and its scores do not estimate performance on the complete dataset.\n\nThe input file contains data; the checkpoint contains learned model weights. Those are different things. We use the BGL-specific adapters and projection weights with the base BERT and Llama models. We are running inference, which means making predictions without updating those weights.\u201d\n\nPoint to: the original-source link, prepared-test link, local sample path, and full-test label counts.\n\nTransition: \u201cFirst, I will illustrate what an original record looks like before showing the prepared input we actually evaluate.\u201d",
+          "blocks": [
+            {
+              "label": "Local input",
+              "text": "/Users/poojasindham/Desktop/gaurdrail/data/BGL/smoke-mixed.csv"
+            },
+            {
+              "label": "Full prepared test label counts",
+              "text": "{\n  \"normal\": 8610,\n  \"anomalous\": 817\n}"
+            }
+          ],
+          "links": [
+            {
+              "label": "Original description",
+              "url": "https://github.com/logpai/loghub/tree/master/BGL"
+            },
+            {
+              "label": "Original download",
+              "url": "https://zenodo.org/records/8196385/files/BGL.zip?download=1"
+            },
+            {
+              "label": "Prepared test",
+              "url": "https://drive.google.com/file/d/1aMKzhrLklnk5RX78UBc3Zx3voIIGnQzo/view"
+            },
+            {
+              "label": "LogLLM authors\u2019 preparation and test links",
+              "url": "https://github.com/guanwei49/LogLLM"
+            }
+          ],
+          "command": "python presentation_walkthrough.py sources --dataset BGL"
+        },
+        {
+          "title": "Original log record and parsed fields",
+          "owner": "Nikhil",
+          "explanation": "Actual public-source excerpt parsed using the repository\u2019s format regex. This is a separate format illustration, not a reconstruction of the selected test sequence. The entire raw archive was not reprocessed locally.",
+          "say": "What I am explaining: parsing a raw record into named fields.\n\n\u201cAn original log line combines metadata and a message. Metadata can include a date, timestamp, machine identifier, component, or severity field. The Content field contains the event message itself. The repository uses a dataset-specific format and a regular expression to separate the line into these named fields.\n\nThe original Label field is a reference annotation. In this preparation code, a dash maps to zero, meaning normal; other tags map to one, meaning anomalous. This conversion constructs the reference answer. It is not a model prediction. A severity word such as INFO or an occurrence of the word error is not the same thing as the reference Label field.\n\nThe record shown here is a real source excerpt. It illustrates parsing, but it is not the raw ancestor of the selected sequence shown on the next slide. We downloaded the authors\u2019 already-prepared test file rather than regenerating it from the entire archive. Also, the existing raw parser silently skips unmatched lines; we should not describe it as comprehensive validation.\u201d\n\nPoint to: one raw field and its matching parsed value, then the extracted Content.\n\nTransition: \u201cAfter preparation, the model\u2019s input is organized as groups of messages in a CSV.\u201d",
+          "blocks": [
+            {
+              "label": "Original record",
+              "text": "- 1117838570 2005.06.03 R02-M1-N0-C:J12-U11 2005-06-03-15.42.50.675872 R02-M1-N0-C:J12-U11 RAS KERNEL INFO instruction cache parity error corrected"
+            },
+            {
+              "label": "Parsed fields",
+              "text": "{\n  \"Label\": \"-\",\n  \"Id\": \"1117838570\",\n  \"Date\": \"2005.06.03\",\n  \"Code1\": \"R02-M1-N0-C:J12-U11\",\n  \"Time\": \"2005-06-03-15.42.50.675872\",\n  \"Code2\": \"R02-M1-N0-C:J12-U11\",\n  \"Component1\": \"RAS\",\n  \"Component2\": \"KERNEL\",\n  \"Level\": \"INFO\",\n  \"Content\": \"instruction cache parity error corrected\"\n}"
+            },
+            {
+              "label": "Excerpt provenance",
+              "text": "{\n  \"source\": \"https://raw.githubusercontent.com/logpai/loghub/master/BGL/BGL_2k.log\",\n  \"note\": \"First three source lines; separate illustration, not proven to be the origin rows of the selected prepared sequences.\"\n}"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py raw --dataset BGL"
+        },
+        {
+          "title": "How train.csv and test.csv are created",
+          "owner": "",
+          "explanation": "These are instructions implemented in prepareData/sliding_window.py and prepareData/helper.py. They describe how to prepare full raw logs; the current downloaded CSVs were not regenerated locally.",
+          "blocks": [
+            {
+              "label": "1 \u00b7 Download and configure",
+              "text": "Download and extract the original BGL archive.\nSet data_dir to its directory and log_name to the extracted log filename.\nThe filename must identify the dataset for the script\u2019s format selection.\nUse the complete BGL raw log: start_line = 0; end_line = None.\nSet output_dir to a separate destination to preserve the downloaded CSVs.\nThe three-line raw-excerpt.log is insufficient for full dataset preparation."
+            },
+            {
+              "label": "2 \u00b7 Parse and convert labels",
+              "text": "structure_log() extracts named fields using the dataset format regex.\nOutput: <log_name>_structured.csv\nRetain Content and the reference Label for grouping.\nRaw Label \"-\" \u2192 0 (normal); other tags \u2192 1 (anomalous).\nUnmatched raw records are skipped by the existing parser."
+            },
+            {
+              "label": "3 \u00b7 Split, then group",
+              "text": "train_ratio = 0.8\nFirst 80% of parsed records \u2192 training\nRemaining 20% \u2192 testing\nNo random shuffle in this BGL/Liberty preparation path.\n\nwindow_size = 100; step_size = 100\nGroup each split separately to avoid a window crossing its boundary.\nWindow reference label = maximum of its event labels.\nThe existing helper retains a shorter final window if needed."
+            },
+            {
+              "label": "4 \u00b7 Save CSV files",
+              "text": "train.csv / test.csv columns:\nContent        Messages joined with \" ;-; \"\nLabel          Reference class for the whole sequence\nitem_Label     List of individual message reference labels\nsession_length Number of messages in the sequence\n\nSourceRow is added later by our sample-selection step; it is not an original prepared-file column.\nRegex normalization and BERT tokenization happen later in the loader, not in this preparation step."
+            },
+            {
+              "label": "Preparation command \u2014 only after paths and raw data are configured",
+              "text": "cd /Users/poojasindham/Desktop/gaurdrail\nsource .venv-logllm/bin/activate\npython prepareData/sliding_window.py\n\nThis command writes preparation outputs; it is not executed by this presentation."
+            }
+          ],
+          "links": [
+            {
+              "label": "Upstream preparation instructions",
+              "url": "https://github.com/guanwei49/LogLLM#3-prepare-training-and-testing-data"
+            }
+          ],
+          "command": "sed -n '1,110p' prepareData/sliding_window.py",
+          "say": "What I am explaining: how the repository can turn original BGL records into train.csv and test.csv.\n\n\u201cWe first obtain and extract the full raw archive. The script needs its directory and filename configured. Use the complete BGL raw log: start_line = 0; end_line = None. The repository currently contains hardcoded paths, so this is not a command to run unchanged.\n\nThe parser separates each record into fields and writes an intermediate structured CSV. The raw reference label is converted into zero or one. This is preparing the answer key; it is not predicting anomalies. Invalid-format records can be skipped by the existing parser.\n\nThe code then divides the parsed records in their existing order: the first eighty percent are training records and the remaining twenty percent are test records. Only after that split does it form windows separately within each portion. With a window size and step of one hundred, consecutive groups do not overlap. A final group may be shorter.\n\nIf any event in a group has reference label one, the sequence receives reference label one. The script joins each group\u2019s messages into Content and saves the sequence label, the individual event labels, and the message count. These become train.csv and test.csv.\n\nThis preparation code exists in the repository. Our local test.csv files were downloaded already prepared, so we have not established that rerunning the current script reproduces those files exactly. Normalization and tokenization still happen afterward when the model loader reads the sequences.\u201d\n\nPoint to: the split before windowing, the four saved columns, and the preparation command\u2019s configuration requirement.\n\nTransition: \u201cNow we can inspect a row of the prepared test file and follow it through our actual evaluation.\u201d"
+        },
+        {
+          "title": "Prepared sequence and reference label",
+          "owner": "Nikhil",
+          "explanation": "The preparation script maps event labels to 0/1, splits the structured data 80/20, and forms count-based windows of 100 messages with step 100. A window reference label is 1 if any event label is 1. This describes the provided code; the exact historical run was not reproduced here.",
+          "say": "What I am explaining: the unit the model classifies and the separation between input and answer key.\n\n\u201cEach row in this prepared CSV represents a sequence, not a single message. In our selected sample, each sequence contains one hundred messages, separated by the literal delimiter shown on screen. The excerpt displays only the first three messages for readability.\n\nContent is the input text. Label is the reference answer: zero for normal and one for anomalous. SourceRow points to the zero-based row in the prepared test CSV, excluding its header; it is not a raw-log line number.\n\nThe repository\u2019s count-window preparation groups messages and assigns the window an anomalous reference label if any event in it is labeled anomalous. That is how a target can be constructed for training or evaluation. The neural model does not use that rule to predict\u2014it has to generate its own answer from the processed messages.\n\nDuring evaluation, the labels are loaded alongside the data but are not passed into the model\u2019s inference call. They are compared with predictions afterward. The displayed preparation recipe comes from the code; we have not independently reproduced the historical generation of these downloaded CSVs.\u201d\n\nPoint to: the sequence length, Content excerpt, reference label, and SourceRow.\n\nTransition: \u201cNext, the loader normalizes the message content.\u201d",
+          "blocks": [
+            {
+              "label": "Selected row metadata",
+              "text": "{\n  \"sample_index\": 0,\n  \"SourceRow\": 0,\n  \"Label\": 0,\n  \"messages\": 100\n}"
+            },
+            {
+              "label": "Content excerpt; messages separated by ;-;",
+              "text": "iar 00106210 dear 0244c20c ;-; iar 00106210 dear 0244c23c ;-; iar 00106210 dear 0244c20c"
+            },
+            {
+              "label": "Prepared CSV columns",
+              "text": "[\n  \"Content\",\n  \"Label\",\n  \"item_Label\",\n  \"session_length\"\n]"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py inputs --dataset BGL"
+        },
+        {
+          "title": "Normalization before BERT",
+          "owner": "Nikhil",
+          "explanation": "CustomDataset applies replace_patterns() to Content. Regexes mask matched numeric values, IP addresses, paths, and other patterns as <*>. Repeated dots are reduced. The tokenizer later lowercases text. This is the existing LogLLM preprocessing, not a newly trained parser.",
+          "say": "What I am explaining: how normalization changes the actual text before tokenization.\n\n\u201cThe dataset loader calls replace_patterns on Content. This is a deterministic regular-expression function: the same text produces the same normalized output. It masks matched patterns such as numeric identifiers, IP addresses, and file paths with the placeholder <*>. It also handles other configured patterns and reduces runs of repeated dots.\n\nFor example, two messages that differ only in a matched identifier may become identical after masking. The intention is to reduce variation from changing values so the model can process more consistent message patterns. This operation does not detect an anomaly or assign a label.\n\nWe are using the existing upstream normalization function. It is not a newly trained template parser, and it does not guarantee an accuracy improvement. Masking can remove useful information, and its regexes can replace parts of a word or path. Later, the uncased BERT tokenizer also lowercases the text; that is a separate operation.\n\nThe before and after panels contain the same actual messages from the selected sample. We can therefore inspect exactly what this implementation removes and what remains.\u201d\n\nPoint to: a changing value before masking and the corresponding <*> afterward. Do not describe every remaining word as an identified security feature.\n\nTransition: \u201cThe normalized messages are then arranged into a batch for BERT.\u201d",
+          "blocks": [
+            {
+              "label": "Before",
+              "text": "iar 00106210 dear 0244c20c\niar 00106210 dear 0244c23c\niar 00106210 dear 0244c20c"
+            },
+            {
+              "label": "After",
+              "text": "iar <*> dear <*>\niar <*> dear <*>\niar <*> dear <*>"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py preprocessing --dataset BGL"
+        },
+        {
+          "title": "Sequence boundaries and batch construction",
+          "owner": "Pooja",
+          "explanation": "Content is split on the exact delimiter \" ;-; \". CustomCollator keeps at most 128 messages per sequence, combines messages for BERT tokenization, and records boundaries. Our saved run uses batch size 1.",
+          "say": "What I am explaining: the difference between messages, sequences, windows, and batches.\n\n\u201cA message is one entry. A sequence is a group of entries that receives one prediction. A window is a rule for forming such groups. A batch is the number of sequences processed together in one model call.\n\nOur prepared sample already has one hundred messages per sequence. The loader splits the Content string using the delimiter. The collator then keeps at most 128 messages per sequence and limits each tokenized message to 100 BERT tokens. These are input caps: changing them does not rebuild the original windows. With 100 messages and a cap of 128, no messages are removed from these sample sequences by that cap.\n\nFor efficiency, messages from all sequences in a batch are combined for BERT. The code records split positions so it can restore the sequence groups after encoding. With batch size one, the split-position list is empty because there is no boundary between different sequences to record.\n\nThe separate six-event example in the Terminal explains window size and stride. It is an illustration using the existing helper, not a model experiment or a change to our prepared evaluation data.\u201d\n\nPoint to: sequence count, message count, length limits, and split positions.\n\nTransition: \u201cNow we can inspect the numerical input that the tokenizer produces.\u201d",
+          "blocks": [
+            {
+              "label": "Normalized message list excerpt",
+              "text": "[\n  \"iar <*> dear <*>\",\n  \"iar <*> dear <*>\",\n  \"iar <*> dear <*>\"\n]"
+            },
+            {
+              "label": "Batch description",
+              "text": "{\n  \"sequences\": 1,\n  \"messages\": 100,\n  \"max_messages_per_sequence\": 128,\n  \"max_tokens_per_message\": 100,\n  \"sequence_split_positions\": []\n}"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py sequences --dataset BGL"
+        },
+        {
+          "title": "Actual BERT tokenizer output",
+          "owner": "Nikhil / Pooja",
+          "explanation": "The local BERT tokenizer converts text into WordPiece tokens and integer IDs. [CLS] and [SEP] are special tokens; ## means a continuing word piece. Padding makes message rows equal length. The attention mask is 1 for included tokens and 0 for padding, not an anomaly indicator.",
+          "say": "What I am explaining: how text becomes the integer input BERT accepts.\n\n\u201cThe tokenizer breaks text into vocabulary pieces called tokens. A token can be a word, punctuation, or part of a word. With WordPiece tokenization, a piece beginning with ## continues a word. The placeholder <*> is also tokenized into pieces; it is not a special anomaly symbol.\n\nEach token is mapped to an integer vocabulary ID. These IDs are lookup indices, not severity values or meaningful measurements: a larger ID does not mean a more anomalous token. BERT later looks up learned numerical embeddings for them. [CLS] marks the start and [SEP] the end of each message input. [PAD] fills shorter rows so they can be stored together.\n\nThe attention mask tells BERT which positions are real or special tokens and which are padding: one means included, zero means padding. It is not a normal/anomalous mask, nor an explanation of what BERT considers important.\n\nIn this captured BGL batch, the input shape is [100, 11]: one hundred message rows with 11 token positions per row after padding. A tensor is simply a numerical array with one or more dimensions. The width depends on this batch\u2019s token lengths and the configured cap.\u201d\n\nPoint to: a token, its ID at the same position, the mask, and both dimensions of the shape.\n\nTransition: \u201cBERT turns those token IDs into learned message vectors.\u201d",
+          "blocks": [
+            {
+              "label": "Tokens, first message",
+              "text": "[\n  \"[CLS]\",\n  \"ia\",\n  \"##r\",\n  \"<\",\n  \"*\",\n  \">\",\n  \"dear\",\n  \"<\",\n  \"*\",\n  \">\",\n  \"[SEP]\"\n]"
+            },
+            {
+              "label": "Token IDs, first message",
+              "text": "[\n  101,\n  24264,\n  2099,\n  1026,\n  1008,\n  1028,\n  6203,\n  1026,\n  1008,\n  1028,\n  102\n]"
+            },
+            {
+              "label": "Input tensor shape and attention mask",
+              "text": "{\n  \"shape\": [\n    100,\n    11\n  ],\n  \"mask\": [\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1\n  ]\n}"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py tokens --dataset BGL"
+        },
+        {
+          "title": "BERT output with the dataset adapter",
+          "owner": "Vijaya",
+          "explanation": "BERT receives token IDs and attention masks. The code uses pooler_output: one 768-number vector per message. The values below were captured during real inference with the matching adapter; they are not probabilities or human-readable explanations.",
+          "say": "What I am explaining: what a vector is and what BERT contributes to the pipeline.\n\n\u201cA vector is an ordered list of numbers. Here, a message vector contains 768 values. We also call it a numerical representation or embedding. These values are learned features, not the original token IDs and not a list of named fields such as IP address or severity. We cannot point to a single coordinate and say that it means attack or failure.\n\nBERT first converts token IDs into embeddings and processes them through transformer layers. Its attention mechanism allows tokens within the same message to influence each other\u2019s representations. In our implementation, each message is a separate BERT input row; BERT is not directly attending across all one hundred log messages at this step.\n\nThe code takes BERT\u2019s pooler_output, a transformed representation of the first [CLS] position, as one fixed-length vector for each message. That gives the observed shape [100, 768]: one hundred messages, each represented by 768 numbers. The display shows only eight numbers from the first vector, not the complete tensor.\n\nWe load the dataset-specific LoRA adapter with base BERT. LoRA stores learned low-rank adjustments to selected layers. During this inference run those weights remain fixed. The vector is an intermediate representation; BERT does not output our final normal/anomalous verdict here.\u201d\n\nPoint to: [100, 768], the eight-value excerpt, and the BERT adapter path. Positive and negative numbers are representation values, not confidence percentages.\n\nTransition: \u201cLlama expects a different vector size, so the projection layer converts these message vectors.\u201d",
+          "blocks": [
+            {
+              "label": "Observed BERT output",
+              "text": "{\n  \"shape\": [\n    100,\n    768\n  ],\n  \"dtype\": \"torch.float16\",\n  \"first_eight_values\": [\n    -0.71875,\n    -0.1968994140625,\n    0.38525390625,\n    0.55908203125,\n    -0.111083984375,\n    -0.06024169921875,\n    0.67041015625,\n    0.045166015625\n  ]\n}"
+            },
+            {
+              "label": "Adapter folder",
+              "text": "/Users/poojasindham/Desktop/gaurdrail/ft_model_BGL/Bert_ft"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py trace --dataset BGL"
+        },
+        {
+          "title": "Projection into Llama\u2019s representation size",
+          "owner": "Vijaya",
+          "explanation": "The learned linear projection converts each 768-value BERT vector into a 4,096-value vector. The code then casts the projected vectors to float16 before building the Llama input.",
+          "say": "What I am explaining: why the projection layer is needed and what changes at this stage.\n\n\u201cBERT produces a 768-value vector per message, while this Llama model expects a 4,096-value embedding at each input position. The projection layer is a learned linear mapping that connects these two sizes. For one message, it computes y = W x + b, where x is the BERT vector, W is a learned matrix, and b is a learned bias.\n\nThe output shape is [100, 4096]. The number of message rows remains one hundred; only the representation width changes. It is not padding the BERT vector with zeros or creating 4,096 messages. The learned transformation produces a representation that the downstream model can use.\n\nThe weights are loaded from projector.pt. The captured projection values are float32 at this point; the model code then casts them to float16 before assembling Llama\u2019s input. Float32 and float16 describe numerical precision, not prediction quality or confidence.\n\nLike the BERT vectors, these projected values are intermediate features, not anomaly scores. Their usefulness depends on the learned weights and the rest of the model, rather than on interpreting a single displayed coordinate.\u201d\n\nPoint to: the change from 768 to 4,096 columns, the unchanged 100 rows, the dtype, and the saved projector path.\n\nTransition: \u201cWe place these projected message vectors between the instruction and question embeddings for Llama.\u201d",
+          "blocks": [
+            {
+              "label": "Observed projection output before float16 cast",
+              "text": "{\n  \"shape\": [\n    100,\n    4096\n  ],\n  \"dtype\": \"torch.float32\",\n  \"first_eight_values\": [\n    -2.052311420440674,\n    0.110897958278656,\n    0.2268199622631073,\n    0.6610448956489563,\n    0.9206374883651733,\n    -1.9726778268814087,\n    1.1101058721542358,\n    0.4854617714881897\n  ]\n}"
+            },
+            {
+              "label": "Saved weights",
+              "text": "/Users/poojasindham/Desktop/gaurdrail/ft_model_BGL/projector.pt"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py trace --dataset BGL"
+        },
+        {
+          "title": "Llama input and generated response",
+          "owner": "Vijaya",
+          "explanation": "Llama receives embeddings: instruction text embeddings, projected log vectors, question embeddings, and the answer prefix. It generates a short answer token by token using argmax. Reference labels are not included.",
+          "say": "What I am explaining: what Llama actually receives and how it generates a classification.\n\n\u201cThe input is a sequence of embeddings, not a CSV file or a plain-text copy of every original log. The code combines embeddings of the instruction, one projected vector per message, embeddings of the question, and the answer prefix \u2018The sequence is\u2019. This gives Llama the task instruction together with the encoded log sequence.\n\nThe observed shape [1, 124, 4096] means one sequence in the batch, 124 input positions, and 4,096 values at every position. In this example, one hundred positions represent log messages and the remaining 24 come from the surrounding prompt. The shape can change for a different sequence length.\n\nLlama uses its base weights and the dataset-specific adapter. It predicts scores called logits for possible next tokens. Our code selects the highest-scoring token using argmax and continues generating, reusing cached attention information. It stops when the sequence finishes or reaches the code\u2019s short answer-length cap.\n\nThe generated token IDs are decoded into text such as \u2018normal.\u2019 or \u2018anomalous.\u2019. The reference label is not part of this prompt. We do not report the logits as calibrated confidence, and this short classification response does not explain which individual message caused the decision.\u201d\n\nPoint to: the input\u2019s three dimensions, the prompt composition, generated IDs, and decoded text.\n\nTransition: \u201cThe evaluator converts that response into a class and compares it with the answer key.\u201d",
+          "blocks": [
+            {
+              "label": "Prompt around the projected messages",
+              "text": "Below is a sequence of system log messages: [projected log vectors] . Is this sequence normal or anomalous? \\n The sequence is"
+            },
+            {
+              "label": "Observed Llama input",
+              "text": "{\n  \"shape\": [\n    1,\n    124,\n    4096\n  ],\n  \"dtype\": \"torch.float16\",\n  \"first_eight_values\": [\n    -0.0001430511474609375,\n    0.00010776519775390625,\n    -0.0001964569091796875,\n    3.170967102050781e-05,\n    0.0001239776611328125,\n    -0.000370025634765625,\n    0.00830078125,\n    -0.0033416748046875\n  ],\n  \"attention_mask_shape\": [\n    1,\n    124\n  ],\n  \"composition\": \"instruction embeddings + projected message vectors + question embeddings + answer-prefix embeddings\"\n}"
+            },
+            {
+              "label": "Actual generated output",
+              "text": "{\n  \"token_ids\": [\n    [\n      4725,\n      13,\n      128001\n    ]\n  ],\n  \"decoded\": [\n    \" normal.\"\n  ]\n}"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py trace --dataset BGL"
+        },
+        {
+          "title": "Prediction records and correctness",
+          "owner": "Vijaya / Viswa",
+          "explanation": "The evaluator maps generated normal/anomalous text to 0/1, then compares it with the separate reference labels. These are saved results from completed inference, not a live model running inside this presentation.",
+          "say": "What I am explaining: the difference between a model prediction and a correct detection.\n\n\u201cThe evaluator reads the generated text and maps normal to zero and anomalous to one. An answer that cannot be parsed as either class raises an error rather than being silently treated as normal.\n\nPrediction is the model\u2019s answer. Reference label is the dataset\u2019s answer. A reference of one and prediction of one is a detected anomaly, or true positive. Zero and zero is a correctly classified normal sequence, or true negative. Reference zero with prediction one is a false alarm. Reference one with prediction zero is a missed anomaly.\n\nSample index identifies the row in our selected input. Source row links that row back to the authors\u2019 prepared test CSV. This lets us inspect the input associated with a prediction. It does not establish a causal explanation of the model\u2019s decision.\n\nThese records are from a completed real inference run. Opening this presentation or running the results walkthrough reads those saved records; it does not secretly start another model run. Each verdict applies to an entire sequence, so it should not be presented as a precise attack category or a highlighted offending log line.\u201d\n\nPoint to: one prediction row and compare its reference, prediction, model text, and outcome. Show an error when the selected run contains one.\n\nTransition: \u201cFinally, we summarize these individual outcomes into evaluation metrics.\u201d",
+          "blocks": [
+            {
+              "label": "Completed result file",
+              "text": "/Users/poojasindham/Desktop/gaurdrail/outputs/BGL-mixed-smoke/predictions.csv"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py results --dataset BGL",
+          "rows": [
+            [
+              0,
+              0,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              1,
+              1,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              2,
+              2,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              3,
+              3,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              4,
+              4,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              5,
+              5,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              6,
+              6,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              7,
+              7,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              8,
+              8,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              9,
+              9,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              10,
+              1141,
+              1,
+              0,
+              "normal.",
+              "Missed anomaly"
+            ],
+            [
+              11,
+              2303,
+              1,
+              0,
+              "normal.",
+              "Missed anomaly"
+            ],
+            [
+              12,
+              2305,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ],
+            [
+              13,
+              2306,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ],
+            [
+              14,
+              2492,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ],
+            [
+              15,
+              2512,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ],
+            [
+              16,
+              2523,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ],
+            [
+              17,
+              2539,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ],
+            [
+              18,
+              2625,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ],
+            [
+              19,
+              2628,
+              1,
+              0,
+              "normal.",
+              "Missed anomaly"
+            ]
+          ]
+        },
+        {
+          "title": "Evaluation and reproducibility",
+          "owner": "Viswa",
+          "explanation": "Metrics below are recomputed and checked against the saved predictions. Both samples were deliberately balanced and selected, not representative benchmarks. Each dataset uses its own adapter checkpoint; this is not a cross-dataset generalization test.",
+          "say": "What I am explaining: how the scores are calculated and what conclusions they support.\n\n\u201cIn this selected BGL run, we have 10 correctly classified normal sequences, 7 detected anomalies, 0 false alarms, and 3 missed anomalies.\n\nAccuracy asks: out of all sequences, how many predictions were correct? It is (TP + TN) divided by the sample count. Precision asks: among sequences flagged anomalous, how many really had an anomalous reference label? It is TP / (TP + FP). Recall asks: among all reference anomalies, how many did we detect? It is TP / (TP + FN). F1 is the harmonic mean of precision and recall, 2PR / (P + R).\n\nHere the recorded accuracy is 85%, precision is 100%, recall is 70%, and F1 is 82.35%. These are aggregate scores across the selected sample, not confidence values for individual predictions. We checked their arithmetic against the saved prediction rows.\n\nBoth samples deliberately contain ten normal and ten anomalous sequences. They do not reflect the full datasets\u2019 class distributions. Each dataset also uses its own checkpoint, so this comparison does not show that one checkpoint generalizes to the other dataset. The BGL scores come from the earlier twenty-sequence run; its intermediate trace is a separate one-sequence observation, not a new benchmark.\n\nWe save predictions.csv for individual outputs, metrics.json for scores, and run.json for paths and execution settings. These records support inspection and rerunning with the same settings, but they do not guarantee bit-for-bit results on every environment or prove who originally trained the weights.\u201d\n\nPoint to: confusion counts first, then scores and run settings.\n\nClosing: \u201cWe have demonstrated two functioning dataset-specific inference paths and made their transformations and results inspectable. Larger evaluations would be needed for broader performance claims.\u201d",
+          "blocks": [
+            {
+              "label": "Scores for the 20-sequence sample",
+              "text": "{\n  \"samples\": 20,\n  \"accuracy\": 0.85,\n  \"precision\": 1.0,\n  \"recall\": 0.7,\n  \"f1\": 0.8235294117647058\n}"
+            },
+            {
+              "label": "Confusion counts",
+              "text": "{\n  \"TN\": 10,\n  \"FP\": 0,\n  \"FN\": 3,\n  \"TP\": 7\n}"
+            },
+            {
+              "label": "Recorded run settings",
+              "text": "{\n  \"dataset\": \"BGL\",\n  \"data\": \"/Users/poojasindham/Desktop/gaurdrail/data/BGL/smoke-mixed.csv\",\n  \"checkpoint\": \"/Users/poojasindham/Desktop/gaurdrail/ft_model_BGL\",\n  \"device\": \"mps\",\n  \"batch_size\": 1,\n  \"limit\": 20,\n  \"max_seq_len\": 128,\n  \"max_content_len\": 100\n}"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py results --dataset BGL"
+        }
+      ],
+      "metrics": {
+        "samples": 20,
+        "accuracy": 0.85,
+        "precision": 1.0,
+        "recall": 0.7,
+        "f1": 0.8235294117647058
+      },
+      "counts": {
+        "TN": 10,
+        "FP": 0,
+        "FN": 3,
+        "TP": 7
+      },
+      "manifest": {
+        "input_sha256": "93a542109cd7b05f6ca14aa155beeaef7fc6e10c4f3a4b2bf1eec23963278f6c",
+        "test_sha256": "c5afe646e1be5a77ed480358f1138ec93c84d4d3c568806c83aeb738730c0bd8",
+        "trace_path": "/Users/poojasindham/Desktop/gaurdrail/outputs/BGL-trace-example/pipeline-trace.json",
+        "predictions_sha256": "38f81bc32608fcdd09ee90af8ddcf0d73878ca9aecda759932b51d1c2119d9c3",
+        "selection": "First 10 normal and first 10 anomalous rows; zero-based SourceRow.",
+        "checkpoint_files": {
+          "ft_model_BGL/Bert_ft/adapter_model.safetensors": "0f2a2ee583bf1b485b1982995cb300f30e5826eac902cdc944c2b6b0b0ed6156",
+          "ft_model_BGL/Llama_ft/adapter_model.safetensors": "eede0b9e1459729d2bd86bbf6ba98dafc2bd73231553c6f9714b9f2c3995f6d8",
+          "ft_model_BGL/projector.pt": "e521ddcf200a0523447b35f0cf24b42f080845f2a36b6c327a75a385bf93b6fe"
+        }
+      }
+    },
+    "Liberty": {
+      "dataset": "Liberty",
+      "stages": [
+        {
+          "title": "Where the pipeline starts",
+          "owner": "",
+          "explanation": "The complete workflow starts with public raw system logs. Dataset preparation creates labeled training and test sequences. Our current evaluation starts later, with the authors\u2019 prepared test.csv and an existing checkpoint.",
+          "blocks": [
+            {
+              "label": "Complete workflow described by the repository",
+              "text": "Original public log archive\n  \u2193 download and extract\nRaw log records\n  \u2193 parse fields and convert reference labels\nStructured records\n  \u2193 first 80% / remaining 20% split\nSeparate training and test records\n  \u2193 group each split into message sequences\ntrain.csv                         test.csv\n  \u2193 fine-tuning                     \u2193 inference with saved weights\nAdapters + projection weights \u2500\u2500\u2500\u2192 Predictions\n                                    \u2193 compare with reference labels\n                                  Metrics"
+            },
+            {
+              "label": "What we actually ran locally",
+              "text": "Authors\u2019 prepared Liberty test.csv\n  \u2193 select first 10 normal + first 10 anomalous\nsmoke-mixed.csv\n  \u2193 normalize \u2192 tokenize \u2192 BERT \u2192 projection \u2192 Llama\nPredictions and evaluation files\n\nLoaded checkpoint: ft_model_Liberty\nRaw-source excerpts: separate parsing illustrations\nFull raw-data preparation and training: not rerun for this presentation"
+            }
+          ],
+          "links": [
+            {
+              "label": "Original description",
+              "url": "https://www.usenix.org/cfdr-data#hpc4"
+            },
+            {
+              "label": "Original download",
+              "url": "http://0b4af6cdc2f0c5998459-c0245c5c937c5dedcca3f1764ecc9b2f.r43.cf2.rackcdn.com/hpc4/liberty2.gz"
+            },
+            {
+              "label": "Prepared test",
+              "url": "https://drive.google.com/file/d/1-Z2FrsRSm8ojfOW1555obNyU6B_aRDTH/view"
+            },
+            {
+              "label": "LogLLM authors\u2019 preparation and test links",
+              "url": "https://github.com/guanwei49/LogLLM"
+            }
+          ],
+          "command": "python presentation_walkthrough.py sources --dataset Liberty",
+          "say": "What I am explaining: the beginning of the full workflow and where our current experiment enters it.\n\n\u201cThe original input is a public collection of records written by the Liberty system. Those records must be prepared before this model can train or evaluate on them. Preparation extracts the message fields, converts reference labels, divides records into training and test portions, and groups messages into sequences.\n\nThe training branch uses train.csv to learn adapter and projection weights. The evaluation branch uses test.csv with saved weights to generate predictions. The test labels are used afterward to check correctness, not supplied as answers during inference.\n\nFor our local demonstration, we downloaded the authors\u2019 prepared test.csv and selected twenty sequences. We loaded the existing dataset-specific checkpoint. We did not regenerate the full training/test files or retrain the models during this presentation. The next sections explain both the original preparation process and the actual steps we executed.\u201d\n\nPoint to: the two branches in the complete workflow, then the starting point in our local workflow.\n\nTransition: \u201cFirst, here are the original dataset links and the prepared file we downloaded.\u201d"
+        },
+        {
+          "title": "Source data and the file used today",
+          "owner": "Pooja",
+          "explanation": "Liberty has 10,000 prepared test sequences locally. Our presentation uses the first 10 normal and first 10 anomalous sequences. Original logs, prepared CSVs, and our selected sample are different artifacts.",
+          "say": "What I am explaining: where our data comes from and exactly what this experiment uses.\n\n\u201cWe are working with Liberty, a public collection of logs from the Liberty supercomputing system. A log is a text record of a system event. A dataset is a collection of these records. Our source links distinguish the original logs from the prepared test CSV published by the LogLLM authors.\n\nWe begin inference with that prepared CSV. We selected the first ten normal and first ten anomalous sequences, retaining their original CSV row numbers. This deliberately balanced sample makes both classes visible in a short demonstration. It is not a random sample, and its scores do not estimate performance on the complete dataset.\n\nThe input file contains data; the checkpoint contains learned model weights. Those are different things. We use the Liberty-specific adapters and projection weights with the base BERT and Llama models. We are running inference, which means making predictions without updating those weights.\u201d\n\nPoint to: the original-source link, prepared-test link, local sample path, and full-test label counts.\n\nTransition: \u201cFirst, I will illustrate what an original record looks like before showing the prepared input we actually evaluate.\u201d",
+          "blocks": [
+            {
+              "label": "Local input",
+              "text": "/Users/poojasindham/Desktop/gaurdrail/data/Liberty/smoke-mixed.csv"
+            },
+            {
+              "label": "Full prepared test label counts",
+              "text": "{\n  \"normal\": 9349,\n  \"anomalous\": 651\n}"
+            }
+          ],
+          "links": [
+            {
+              "label": "Original description",
+              "url": "https://www.usenix.org/cfdr-data#hpc4"
+            },
+            {
+              "label": "Original download",
+              "url": "http://0b4af6cdc2f0c5998459-c0245c5c937c5dedcca3f1764ecc9b2f.r43.cf2.rackcdn.com/hpc4/liberty2.gz"
+            },
+            {
+              "label": "Prepared test",
+              "url": "https://drive.google.com/file/d/1-Z2FrsRSm8ojfOW1555obNyU6B_aRDTH/view"
+            },
+            {
+              "label": "LogLLM authors\u2019 preparation and test links",
+              "url": "https://github.com/guanwei49/LogLLM"
+            }
+          ],
+          "command": "python presentation_walkthrough.py sources --dataset Liberty"
+        },
+        {
+          "title": "Original log record and parsed fields",
+          "owner": "Nikhil",
+          "explanation": "Actual public-source excerpt parsed using the repository\u2019s format regex. This is a separate format illustration, not a reconstruction of the selected test sequence. The entire raw archive was not reprocessed locally.",
+          "say": "What I am explaining: parsing a raw record into named fields.\n\n\u201cAn original log line combines metadata and a message. Metadata can include a date, timestamp, machine identifier, component, or severity field. The Content field contains the event message itself. The repository uses a dataset-specific format and a regular expression to separate the line into these named fields.\n\nThe original Label field is a reference annotation. In this preparation code, a dash maps to zero, meaning normal; other tags map to one, meaning anomalous. This conversion constructs the reference answer. It is not a model prediction. A severity word such as INFO or an occurrence of the word error is not the same thing as the reference Label field.\n\nThe record shown here is a real source excerpt. It illustrates parsing, but it is not the raw ancestor of the selected sequence shown on the next slide. We downloaded the authors\u2019 already-prepared test file rather than regenerating it from the entire archive. Also, the existing raw parser silently skips unmatched lines; we should not describe it as comprehensive validation.\u201d\n\nPoint to: one raw field and its matching parsed value, then the extracted Content.\n\nTransition: \u201cAfter preparation, the model\u2019s input is organized as groups of messages in a CSV.\u201d",
+          "blocks": [
+            {
+              "label": "Original record",
+              "text": "- 1102911148 2004.12.12 ladmin2 Dec 12 20:12:28 src@ladmin2 .... IRQ redirection table:"
+            },
+            {
+              "label": "Parsed fields",
+              "text": "{\n  \"Label\": \"-\",\n  \"Id\": \"1102911148\",\n  \"Date\": \"2004.12.12\",\n  \"Admin\": \"ladmin2\",\n  \"Month\": \"Dec\",\n  \"Day\": \"12\",\n  \"Time\": \"20:12:28\",\n  \"AdminAddr\": \"src@ladmin2\",\n  \"Content\": \".... IRQ redirection table:\"\n}"
+            },
+            {
+              "label": "Excerpt provenance",
+              "text": "{\n  \"source\": \"http://0b4af6cdc2f0c5998459-c0245c5c937c5dedcca3f1764ecc9b2f.r43.cf2.rackcdn.com/hpc4/liberty2.gz\",\n  \"source_line_numbers_one_based\": [\n    8,\n    9,\n    10\n  ],\n  \"note\": \"Three complete source lines; separate parsing illustration, not the origin rows of our selected test sequences.\"\n}"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py raw --dataset Liberty"
+        },
+        {
+          "title": "How train.csv and test.csv are created",
+          "owner": "",
+          "explanation": "These are instructions implemented in prepareData/sliding_window.py and prepareData/helper.py. They describe how to prepare full raw logs; the current downloaded CSVs were not regenerated locally.",
+          "blocks": [
+            {
+              "label": "1 \u00b7 Download and configure",
+              "text": "Download and extract the original Liberty archive.\nSet data_dir to its directory and log_name to the extracted log filename.\nThe filename must identify the dataset for the script\u2019s format selection.\nFor Liberty, the README instructs start_line = 40000000 and end_line = 45000000. The code uses zero-based indices with an exclusive end, selecting up to five million raw records before parsing.\nSet output_dir to a separate destination to preserve the downloaded CSVs.\nThe three-line raw-excerpt.log is insufficient for full dataset preparation."
+            },
+            {
+              "label": "2 \u00b7 Parse and convert labels",
+              "text": "structure_log() extracts named fields using the dataset format regex.\nOutput: <log_name>_structured.csv\nRetain Content and the reference Label for grouping.\nRaw Label \"-\" \u2192 0 (normal); other tags \u2192 1 (anomalous).\nUnmatched raw records are skipped by the existing parser."
+            },
+            {
+              "label": "3 \u00b7 Split, then group",
+              "text": "train_ratio = 0.8\nFirst 80% of parsed records \u2192 training\nRemaining 20% \u2192 testing\nNo random shuffle in this BGL/Liberty preparation path.\n\nwindow_size = 100; step_size = 100\nGroup each split separately to avoid a window crossing its boundary.\nWindow reference label = maximum of its event labels.\nThe existing helper retains a shorter final window if needed."
+            },
+            {
+              "label": "4 \u00b7 Save CSV files",
+              "text": "train.csv / test.csv columns:\nContent        Messages joined with \" ;-; \"\nLabel          Reference class for the whole sequence\nitem_Label     List of individual message reference labels\nsession_length Number of messages in the sequence\n\nSourceRow is added later by our sample-selection step; it is not an original prepared-file column.\nRegex normalization and BERT tokenization happen later in the loader, not in this preparation step."
+            },
+            {
+              "label": "Preparation command \u2014 only after paths and raw data are configured",
+              "text": "cd /Users/poojasindham/Desktop/gaurdrail\nsource .venv-logllm/bin/activate\npython prepareData/sliding_window.py\n\nThis command writes preparation outputs; it is not executed by this presentation."
+            }
+          ],
+          "links": [
+            {
+              "label": "Upstream preparation instructions",
+              "url": "https://github.com/guanwei49/LogLLM#3-prepare-training-and-testing-data"
+            }
+          ],
+          "command": "sed -n '1,110p' prepareData/sliding_window.py",
+          "say": "What I am explaining: how the repository can turn original Liberty records into train.csv and test.csv.\n\n\u201cWe first obtain and extract the full raw archive. The script needs its directory and filename configured. For Liberty, the README instructs start_line = 40000000 and end_line = 45000000. The code uses zero-based indices with an exclusive end, selecting up to five million raw records before parsing. The repository currently contains hardcoded paths, so this is not a command to run unchanged.\n\nThe parser separates each record into fields and writes an intermediate structured CSV. The raw reference label is converted into zero or one. This is preparing the answer key; it is not predicting anomalies. Invalid-format records can be skipped by the existing parser.\n\nThe code then divides the parsed records in their existing order: the first eighty percent are training records and the remaining twenty percent are test records. Only after that split does it form windows separately within each portion. With a window size and step of one hundred, consecutive groups do not overlap. A final group may be shorter.\n\nIf any event in a group has reference label one, the sequence receives reference label one. The script joins each group\u2019s messages into Content and saves the sequence label, the individual event labels, and the message count. These become train.csv and test.csv.\n\nThis preparation code exists in the repository. Our local test.csv files were downloaded already prepared, so we have not established that rerunning the current script reproduces those files exactly. Normalization and tokenization still happen afterward when the model loader reads the sequences.\u201d\n\nPoint to: the split before windowing, the four saved columns, and the preparation command\u2019s configuration requirement.\n\nTransition: \u201cNow we can inspect a row of the prepared test file and follow it through our actual evaluation.\u201d"
+        },
+        {
+          "title": "Prepared sequence and reference label",
+          "owner": "Nikhil",
+          "explanation": "The preparation script maps event labels to 0/1, splits the structured data 80/20, and forms count-based windows of 100 messages with step 100. A window reference label is 1 if any event label is 1. This describes the provided code; the exact historical run was not reproduced here.",
+          "say": "What I am explaining: the unit the model classifies and the separation between input and answer key.\n\n\u201cEach row in this prepared CSV represents a sequence, not a single message. In our selected sample, each sequence contains one hundred messages, separated by the literal delimiter shown on screen. The excerpt displays only the first three messages for readability.\n\nContent is the input text. Label is the reference answer: zero for normal and one for anomalous. SourceRow points to the zero-based row in the prepared test CSV, excluding its header; it is not a raw-log line number.\n\nThe repository\u2019s count-window preparation groups messages and assigns the window an anomalous reference label if any event in it is labeled anomalous. That is how a target can be constructed for training or evaluation. The neural model does not use that rule to predict\u2014it has to generate its own answer from the processed messages.\n\nDuring evaluation, the labels are loaded alongside the data but are not passed into the model\u2019s inference call. They are compared with predictions afterward. The displayed preparation recipe comes from the code; we have not independently reproduced the historical generation of these downloaded CSVs.\u201d\n\nPoint to: the sequence length, Content excerpt, reference label, and SourceRow.\n\nTransition: \u201cNext, the loader normalizes the message content.\u201d",
+          "blocks": [
+            {
+              "label": "Selected row metadata",
+              "text": "{\n  \"sample_index\": 0,\n  \"SourceRow\": 0,\n  \"Label\": 0,\n  \"messages\": 100\n}"
+            },
+            {
+              "label": "Content excerpt; messages separated by ;-;",
+              "text": "kernel: LustreError: 2032:0:(client.c:823:ptlrpc_expire_one_request()) @@@ timeout (sent 1126054168) #105#@f72d1200 x540847/t0 o38->#104#@NID_3712519978_UUID:12 lens 168/64 ref 2 fl Rpc:/0/0 rc 0/0 ;-; kernel: LustreError: 1965:0:(client.c:823:ptlrpc_expire_one_request()) @@@ timeout (sent 1126054168) #105#@f3cbb000 x150476/t0 o38->#104#@NID_3712519978_UUID:12 lens 168/64 ref 2 fl Rpc:/0/0 rc 0/0 ;-; kernel: LustreError: 2084:0:(client.c:823:ptlrpc_expire_one_request()) @@@ timeout (sent 1126054169) #105#@e6f51e00 x547988/t0 o38->#104#@NID_3712519978_UUID:12 lens 168/64 ref 2 fl Rpc:/0/0 rc 0/0"
+            },
+            {
+              "label": "Prepared CSV columns",
+              "text": "[\n  \"Content\",\n  \"Label\",\n  \"item_Label\",\n  \"session_length\"\n]"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py inputs --dataset Liberty"
+        },
+        {
+          "title": "Normalization before BERT",
+          "owner": "Nikhil",
+          "explanation": "CustomDataset applies replace_patterns() to Content. Regexes mask matched numeric values, IP addresses, paths, and other patterns as <*>. Repeated dots are reduced. The tokenizer later lowercases text. This is the existing LogLLM preprocessing, not a newly trained parser.",
+          "say": "What I am explaining: how normalization changes the actual text before tokenization.\n\n\u201cThe dataset loader calls replace_patterns on Content. This is a deterministic regular-expression function: the same text produces the same normalized output. It masks matched patterns such as numeric identifiers, IP addresses, and file paths with the placeholder <*>. It also handles other configured patterns and reduces runs of repeated dots.\n\nFor example, two messages that differ only in a matched identifier may become identical after masking. The intention is to reduce variation from changing values so the model can process more consistent message patterns. This operation does not detect an anomaly or assign a label.\n\nWe are using the existing upstream normalization function. It is not a newly trained template parser, and it does not guarantee an accuracy improvement. Masking can remove useful information, and its regexes can replace parts of a word or path. Later, the uncased BERT tokenizer also lowercases the text; that is a separate operation.\n\nThe before and after panels contain the same actual messages from the selected sample. We can therefore inspect exactly what this implementation removes and what remains.\u201d\n\nPoint to: a changing value before masking and the corresponding <*> afterward. Do not describe every remaining word as an identified security feature.\n\nTransition: \u201cThe normalized messages are then arranged into a batch for BERT.\u201d",
+          "blocks": [
+            {
+              "label": "Before",
+              "text": "kernel: LustreError: 2032:0:(client.c:823:ptlrpc_expire_one_request()) @@@ timeout (sent 1126054168) #105#@f72d1200 x540847/t0 o38->#104#@NID_3712519978_UUID:12 lens 168/64 ref 2 fl Rpc:/0/0 rc 0/0\nkernel: LustreError: 1965:0:(client.c:823:ptlrpc_expire_one_request()) @@@ timeout (sent 1126054168) #105#@f3cbb000 x150476/t0 o38->#104#@NID_3712519978_UUID:12 lens 168/64 ref 2 fl Rpc:/0/0 rc 0/0\nkernel: LustreError: 2084:0:(client.c:823:ptlrpc_expire_one_request()) @@@ timeout (sent 1126054169) #105#@e6f51e00 x547988/t0 o38->#104#@NID_3712519978_UUID:12 lens 168/64 ref 2 fl Rpc:/0/0 rc 0/0"
+            },
+            {
+              "label": "After",
+              "text": "kernel: LustreError: <*>(<*>()) @@@ timeout (sent <*>) #<*>#@<*> <*> <*>>#<*>#@<*> lens <*> ref <*> fl <*> rc <*>\nkernel: LustreError: <*>(<*>()) @@@ timeout (sent <*>) #<*>#@<*> <*> <*>>#<*>#@<*> lens <*> ref <*> fl <*> rc <*>\nkernel: LustreError: <*>(<*>()) @@@ timeout (sent <*>) #<*>#@<*> <*> <*>>#<*>#@<*> lens <*> ref <*> fl <*> rc <*>"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py preprocessing --dataset Liberty"
+        },
+        {
+          "title": "Sequence boundaries and batch construction",
+          "owner": "Pooja",
+          "explanation": "Content is split on the exact delimiter \" ;-; \". CustomCollator keeps at most 128 messages per sequence, combines messages for BERT tokenization, and records boundaries. Our saved run uses batch size 1.",
+          "say": "What I am explaining: the difference between messages, sequences, windows, and batches.\n\n\u201cA message is one entry. A sequence is a group of entries that receives one prediction. A window is a rule for forming such groups. A batch is the number of sequences processed together in one model call.\n\nOur prepared sample already has one hundred messages per sequence. The loader splits the Content string using the delimiter. The collator then keeps at most 128 messages per sequence and limits each tokenized message to 100 BERT tokens. These are input caps: changing them does not rebuild the original windows. With 100 messages and a cap of 128, no messages are removed from these sample sequences by that cap.\n\nFor efficiency, messages from all sequences in a batch are combined for BERT. The code records split positions so it can restore the sequence groups after encoding. With batch size one, the split-position list is empty because there is no boundary between different sequences to record.\n\nThe separate six-event example in the Terminal explains window size and stride. It is an illustration using the existing helper, not a model experiment or a change to our prepared evaluation data.\u201d\n\nPoint to: sequence count, message count, length limits, and split positions.\n\nTransition: \u201cNow we can inspect the numerical input that the tokenizer produces.\u201d",
+          "blocks": [
+            {
+              "label": "Normalized message list excerpt",
+              "text": "[\n  \"kernel: LustreError: <*>(<*>()) @@@ timeout (sent <*>) #<*>#@<*> <*> <*>>#<*>#@<*> lens <*> ref <*> fl <*> rc <*>\",\n  \"kernel: LustreError: <*>(<*>()) @@@ timeout (sent <*>) #<*>#@<*> <*> <*>>#<*>#@<*> lens <*> ref <*> fl <*> rc <*>\",\n  \"kernel: LustreError: <*>(<*>()) @@@ timeout (sent <*>) #<*>#@<*> <*> <*>>#<*>#@<*> lens <*> ref <*> fl <*> rc <*>\"\n]"
+            },
+            {
+              "label": "Batch description",
+              "text": "{\n  \"sequences\": 1,\n  \"messages\": 100,\n  \"max_messages_per_sequence\": 128,\n  \"max_tokens_per_message\": 100,\n  \"sequence_split_positions\": []\n}"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py sequences --dataset Liberty"
+        },
+        {
+          "title": "Actual BERT tokenizer output",
+          "owner": "Nikhil / Pooja",
+          "explanation": "The local BERT tokenizer converts text into WordPiece tokens and integer IDs. [CLS] and [SEP] are special tokens; ## means a continuing word piece. Padding makes message rows equal length. The attention mask is 1 for included tokens and 0 for padding, not an anomaly indicator.",
+          "say": "What I am explaining: how text becomes the integer input BERT accepts.\n\n\u201cThe tokenizer breaks text into vocabulary pieces called tokens. A token can be a word, punctuation, or part of a word. With WordPiece tokenization, a piece beginning with ## continues a word. The placeholder <*> is also tokenized into pieces; it is not a special anomaly symbol.\n\nEach token is mapped to an integer vocabulary ID. These IDs are lookup indices, not severity values or meaningful measurements: a larger ID does not mean a more anomalous token. BERT later looks up learned numerical embeddings for them. [CLS] marks the start and [SEP] the end of each message input. [PAD] fills shorter rows so they can be stored together.\n\nThe attention mask tells BERT which positions are real or special tokens and which are padding: one means included, zero means padding. It is not a normal/anomalous mask, nor an explanation of what BERT considers important.\n\nIn this captured Liberty batch, the input shape is [100, 71]: one hundred message rows with 71 token positions per row after padding. A tensor is simply a numerical array with one or more dimensions. The width depends on this batch\u2019s token lengths and the configured cap.\u201d\n\nPoint to: a token, its ID at the same position, the mask, and both dimensions of the shape.\n\nTransition: \u201cBERT turns those token IDs into learned message vectors.\u201d",
+          "blocks": [
+            {
+              "label": "Tokens, first message",
+              "text": "[\n  \"[CLS]\",\n  \"kernel\",\n  \":\",\n  \"lust\",\n  \"##ree\",\n  \"##rro\",\n  \"##r\",\n  \":\",\n  \"<\",\n  \"*\",\n  \">\",\n  \"(\",\n  \"<\",\n  \"*\",\n  \">\",\n  \"(\",\n  \")\",\n  \")\",\n  \"@\",\n  \"@\",\n  \"@\",\n  \"time\",\n  \"##out\",\n  \"(\",\n  \"sent\",\n  \"<\",\n  \"*\",\n  \">\",\n  \")\",\n  \"#\",\n  \"<\",\n  \"*\",\n  \">\",\n  \"#\",\n  \"@\",\n  \"<\",\n  \"*\",\n  \">\",\n  \"<\",\n  \"*\",\n  \">\",\n  \"<\",\n  \"*\",\n  \">\",\n  \">\",\n  \"#\",\n  \"<\",\n  \"*\",\n  \">\",\n  \"#\",\n  \"@\",\n  \"<\",\n  \"*\",\n  \">\",\n  \"lens\",\n  \"<\",\n  \"*\",\n  \">\",\n  \"ref\",\n  \"<\",\n  \"*\",\n  \">\",\n  \"fl\",\n  \"<\",\n  \"*\",\n  \">\",\n  \"rc\",\n  \"<\",\n  \"*\",\n  \">\",\n  \"[SEP]\"\n]"
+            },
+            {
+              "label": "Token IDs, first message",
+              "text": "[\n  101,\n  16293,\n  1024,\n  11516,\n  9910,\n  18933,\n  2099,\n  1024,\n  1026,\n  1008,\n  1028,\n  1006,\n  1026,\n  1008,\n  1028,\n  1006,\n  1007,\n  1007,\n  1030,\n  1030,\n  1030,\n  2051,\n  5833,\n  1006,\n  2741,\n  1026,\n  1008,\n  1028,\n  1007,\n  1001,\n  1026,\n  1008,\n  1028,\n  1001,\n  1030,\n  1026,\n  1008,\n  1028,\n  1026,\n  1008,\n  1028,\n  1026,\n  1008,\n  1028,\n  1028,\n  1001,\n  1026,\n  1008,\n  1028,\n  1001,\n  1030,\n  1026,\n  1008,\n  1028,\n  10014,\n  1026,\n  1008,\n  1028,\n  25416,\n  1026,\n  1008,\n  1028,\n  13109,\n  1026,\n  1008,\n  1028,\n  22110,\n  1026,\n  1008,\n  1028,\n  102\n]"
+            },
+            {
+              "label": "Input tensor shape and attention mask",
+              "text": "{\n  \"shape\": [\n    100,\n    71\n  ],\n  \"mask\": [\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1,\n    1\n  ]\n}"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py tokens --dataset Liberty"
+        },
+        {
+          "title": "BERT output with the dataset adapter",
+          "owner": "Vijaya",
+          "explanation": "BERT receives token IDs and attention masks. The code uses pooler_output: one 768-number vector per message. The values below were captured during real inference with the matching adapter; they are not probabilities or human-readable explanations.",
+          "say": "What I am explaining: what a vector is and what BERT contributes to the pipeline.\n\n\u201cA vector is an ordered list of numbers. Here, a message vector contains 768 values. We also call it a numerical representation or embedding. These values are learned features, not the original token IDs and not a list of named fields such as IP address or severity. We cannot point to a single coordinate and say that it means attack or failure.\n\nBERT first converts token IDs into embeddings and processes them through transformer layers. Its attention mechanism allows tokens within the same message to influence each other\u2019s representations. In our implementation, each message is a separate BERT input row; BERT is not directly attending across all one hundred log messages at this step.\n\nThe code takes BERT\u2019s pooler_output, a transformed representation of the first [CLS] position, as one fixed-length vector for each message. That gives the observed shape [100, 768]: one hundred messages, each represented by 768 numbers. The display shows only eight numbers from the first vector, not the complete tensor.\n\nWe load the dataset-specific LoRA adapter with base BERT. LoRA stores learned low-rank adjustments to selected layers. During this inference run those weights remain fixed. The vector is an intermediate representation; BERT does not output our final normal/anomalous verdict here.\u201d\n\nPoint to: [100, 768], the eight-value excerpt, and the BERT adapter path. Positive and negative numbers are representation values, not confidence percentages.\n\nTransition: \u201cLlama expects a different vector size, so the projection layer converts these message vectors.\u201d",
+          "blocks": [
+            {
+              "label": "Observed BERT output",
+              "text": "{\n  \"shape\": [\n    100,\n    768\n  ],\n  \"dtype\": \"torch.float16\",\n  \"first_eight_values\": [\n    -0.74072265625,\n    -0.54541015625,\n    -0.86376953125,\n    0.53759765625,\n    0.5400390625,\n    -0.287353515625,\n    0.2174072265625,\n    0.4130859375\n  ]\n}"
+            },
+            {
+              "label": "Adapter folder",
+              "text": "/Users/poojasindham/Desktop/gaurdrail/ft_model_Liberty/Bert_ft"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py trace --dataset Liberty"
+        },
+        {
+          "title": "Projection into Llama\u2019s representation size",
+          "owner": "Vijaya",
+          "explanation": "The learned linear projection converts each 768-value BERT vector into a 4,096-value vector. The code then casts the projected vectors to float16 before building the Llama input.",
+          "say": "What I am explaining: why the projection layer is needed and what changes at this stage.\n\n\u201cBERT produces a 768-value vector per message, while this Llama model expects a 4,096-value embedding at each input position. The projection layer is a learned linear mapping that connects these two sizes. For one message, it computes y = W x + b, where x is the BERT vector, W is a learned matrix, and b is a learned bias.\n\nThe output shape is [100, 4096]. The number of message rows remains one hundred; only the representation width changes. It is not padding the BERT vector with zeros or creating 4,096 messages. The learned transformation produces a representation that the downstream model can use.\n\nThe weights are loaded from projector.pt. The captured projection values are float32 at this point; the model code then casts them to float16 before assembling Llama\u2019s input. Float32 and float16 describe numerical precision, not prediction quality or confidence.\n\nLike the BERT vectors, these projected values are intermediate features, not anomaly scores. Their usefulness depends on the learned weights and the rest of the model, rather than on interpreting a single displayed coordinate.\u201d\n\nPoint to: the change from 768 to 4,096 columns, the unchanged 100 rows, the dtype, and the saved projector path.\n\nTransition: \u201cWe place these projected message vectors between the instruction and question embeddings for Llama.\u201d",
+          "blocks": [
+            {
+              "label": "Observed projection output before float16 cast",
+              "text": "{\n  \"shape\": [\n    100,\n    4096\n  ],\n  \"dtype\": \"torch.float32\",\n  \"first_eight_values\": [\n    -0.9259205460548401,\n    -0.7525415420532227,\n    -1.7194838523864746,\n    -2.4591877460479736,\n    -0.9016880393028259,\n    0.314546674489975,\n    -1.0119361877441406,\n    0.3773966133594513\n  ]\n}"
+            },
+            {
+              "label": "Saved weights",
+              "text": "/Users/poojasindham/Desktop/gaurdrail/ft_model_Liberty/projector.pt"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py trace --dataset Liberty"
+        },
+        {
+          "title": "Llama input and generated response",
+          "owner": "Vijaya",
+          "explanation": "Llama receives embeddings: instruction text embeddings, projected log vectors, question embeddings, and the answer prefix. It generates a short answer token by token using argmax. Reference labels are not included.",
+          "say": "What I am explaining: what Llama actually receives and how it generates a classification.\n\n\u201cThe input is a sequence of embeddings, not a CSV file or a plain-text copy of every original log. The code combines embeddings of the instruction, one projected vector per message, embeddings of the question, and the answer prefix \u2018The sequence is\u2019. This gives Llama the task instruction together with the encoded log sequence.\n\nThe observed shape [1, 124, 4096] means one sequence in the batch, 124 input positions, and 4,096 values at every position. In this example, one hundred positions represent log messages and the remaining 24 come from the surrounding prompt. The shape can change for a different sequence length.\n\nLlama uses its base weights and the dataset-specific adapter. It predicts scores called logits for possible next tokens. Our code selects the highest-scoring token using argmax and continues generating, reusing cached attention information. It stops when the sequence finishes or reaches the code\u2019s short answer-length cap.\n\nThe generated token IDs are decoded into text such as \u2018normal.\u2019 or \u2018anomalous.\u2019. The reference label is not part of this prompt. We do not report the logits as calibrated confidence, and this short classification response does not explain which individual message caused the decision.\u201d\n\nPoint to: the input\u2019s three dimensions, the prompt composition, generated IDs, and decoded text.\n\nTransition: \u201cThe evaluator converts that response into a class and compares it with the answer key.\u201d",
+          "blocks": [
+            {
+              "label": "Prompt around the projected messages",
+              "text": "Below is a sequence of system log messages: [projected log vectors] . Is this sequence normal or anomalous? \\n The sequence is"
+            },
+            {
+              "label": "Observed Llama input",
+              "text": "{\n  \"shape\": [\n    1,\n    124,\n    4096\n  ],\n  \"dtype\": \"torch.float16\",\n  \"first_eight_values\": [\n    -0.0001430511474609375,\n    0.00010776519775390625,\n    -0.0001964569091796875,\n    3.170967102050781e-05,\n    0.0001239776611328125,\n    -0.000370025634765625,\n    0.00830078125,\n    -0.0033416748046875\n  ],\n  \"attention_mask_shape\": [\n    1,\n    124\n  ],\n  \"composition\": \"instruction embeddings + projected message vectors + question embeddings + answer-prefix embeddings\"\n}"
+            },
+            {
+              "label": "Actual generated output",
+              "text": "{\n  \"token_ids\": [\n    [\n      4725,\n      13,\n      128001\n    ]\n  ],\n  \"decoded\": [\n    \" normal.\"\n  ]\n}"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py trace --dataset Liberty"
+        },
+        {
+          "title": "Prediction records and correctness",
+          "owner": "Vijaya / Viswa",
+          "explanation": "The evaluator maps generated normal/anomalous text to 0/1, then compares it with the separate reference labels. These are saved results from completed inference, not a live model running inside this presentation.",
+          "say": "What I am explaining: the difference between a model prediction and a correct detection.\n\n\u201cThe evaluator reads the generated text and maps normal to zero and anomalous to one. An answer that cannot be parsed as either class raises an error rather than being silently treated as normal.\n\nPrediction is the model\u2019s answer. Reference label is the dataset\u2019s answer. A reference of one and prediction of one is a detected anomaly, or true positive. Zero and zero is a correctly classified normal sequence, or true negative. Reference zero with prediction one is a false alarm. Reference one with prediction zero is a missed anomaly.\n\nSample index identifies the row in our selected input. Source row links that row back to the authors\u2019 prepared test CSV. This lets us inspect the input associated with a prediction. It does not establish a causal explanation of the model\u2019s decision.\n\nThese records are from a completed real inference run. Opening this presentation or running the results walkthrough reads those saved records; it does not secretly start another model run. Each verdict applies to an entire sequence, so it should not be presented as a precise attack category or a highlighted offending log line.\u201d\n\nPoint to: one prediction row and compare its reference, prediction, model text, and outcome. Show an error when the selected run contains one.\n\nTransition: \u201cFinally, we summarize these individual outcomes into evaluation metrics.\u201d",
+          "blocks": [
+            {
+              "label": "Completed result file",
+              "text": "/Users/poojasindham/Desktop/gaurdrail/outputs/Liberty-mixed-smoke/predictions.csv"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py results --dataset Liberty",
+          "rows": [
+            [
+              0,
+              0,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              1,
+              1,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              2,
+              2,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              3,
+              3,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              4,
+              4,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              5,
+              5,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              6,
+              6,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              7,
+              7,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              8,
+              8,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              9,
+              9,
+              0,
+              0,
+              "normal.",
+              "Correct"
+            ],
+            [
+              10,
+              31,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ],
+            [
+              11,
+              33,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ],
+            [
+              12,
+              40,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ],
+            [
+              13,
+              42,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ],
+            [
+              14,
+              64,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ],
+            [
+              15,
+              65,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ],
+            [
+              16,
+              67,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ],
+            [
+              17,
+              69,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ],
+            [
+              18,
+              70,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ],
+            [
+              19,
+              73,
+              1,
+              1,
+              "anomalous.",
+              "Correct"
+            ]
+          ]
+        },
+        {
+          "title": "Evaluation and reproducibility",
+          "owner": "Viswa",
+          "explanation": "Metrics below are recomputed and checked against the saved predictions. Both samples were deliberately balanced and selected, not representative benchmarks. Each dataset uses its own adapter checkpoint; this is not a cross-dataset generalization test.",
+          "say": "What I am explaining: how the scores are calculated and what conclusions they support.\n\n\u201cIn this selected Liberty run, we have 10 correctly classified normal sequences, 10 detected anomalies, 0 false alarms, and 0 missed anomalies.\n\nAccuracy asks: out of all sequences, how many predictions were correct? It is (TP + TN) divided by the sample count. Precision asks: among sequences flagged anomalous, how many really had an anomalous reference label? It is TP / (TP + FP). Recall asks: among all reference anomalies, how many did we detect? It is TP / (TP + FN). F1 is the harmonic mean of precision and recall, 2PR / (P + R).\n\nHere the recorded accuracy is 100%, precision is 100%, recall is 100%, and F1 is 100.00%. These are aggregate scores across the selected sample, not confidence values for individual predictions. We checked their arithmetic against the saved prediction rows.\n\nBoth samples deliberately contain ten normal and ten anomalous sequences. They do not reflect the full datasets\u2019 class distributions. Each dataset also uses its own checkpoint, so this comparison does not show that one checkpoint generalizes to the other dataset. The BGL scores come from the earlier twenty-sequence run; its intermediate trace is a separate one-sequence observation, not a new benchmark.\n\nWe save predictions.csv for individual outputs, metrics.json for scores, and run.json for paths and execution settings. These records support inspection and rerunning with the same settings, but they do not guarantee bit-for-bit results on every environment or prove who originally trained the weights.\u201d\n\nPoint to: confusion counts first, then scores and run settings.\n\nClosing: \u201cWe have demonstrated two functioning dataset-specific inference paths and made their transformations and results inspectable. Larger evaluations would be needed for broader performance claims.\u201d",
+          "blocks": [
+            {
+              "label": "Scores for the 20-sequence sample",
+              "text": "{\n  \"samples\": 20,\n  \"accuracy\": 1.0,\n  \"precision\": 1.0,\n  \"recall\": 1.0,\n  \"f1\": 1.0\n}"
+            },
+            {
+              "label": "Confusion counts",
+              "text": "{\n  \"TN\": 10,\n  \"FP\": 0,\n  \"FN\": 0,\n  \"TP\": 10\n}"
+            },
+            {
+              "label": "Recorded run settings",
+              "text": "{\n  \"dataset\": \"Liberty\",\n  \"data\": \"/Users/poojasindham/Desktop/gaurdrail/data/Liberty/smoke-mixed.csv\",\n  \"checkpoint\": \"/Users/poojasindham/Desktop/gaurdrail/ft_model_Liberty\",\n  \"device\": \"mps\",\n  \"batch_size\": 1,\n  \"limit\": 20,\n  \"max_seq_len\": 128,\n  \"max_content_len\": 100\n}"
+            }
+          ],
+          "links": [],
+          "command": "python presentation_walkthrough.py results --dataset Liberty"
+        }
+      ],
+      "metrics": {
+        "samples": 20,
+        "accuracy": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "counts": {
+        "TN": 10,
+        "FP": 0,
+        "FN": 0,
+        "TP": 10
+      },
+      "manifest": {
+        "input_sha256": "99c270a3f547bca6c51c1402d774d91f17ca686786f373a61c8404e31f5d3c5d",
+        "test_sha256": "17eedf8de95105de967bbc63f430922b20bc1e657175c4b7340d048134b60133",
+        "trace_path": "/Users/poojasindham/Desktop/gaurdrail/outputs/Liberty-mixed-smoke/pipeline-trace.json",
+        "predictions_sha256": "e9205d5f6662f53b070e2806321a027a416fdca11a339d02bff48e10e1e3a8f7",
+        "selection": "First 10 normal and first 10 anomalous rows; zero-based SourceRow.",
+        "checkpoint_files": {
+          "ft_model_Liberty/Bert_ft/adapter_model.safetensors": "d1eab6de3e66b9ddb99baba3f1ddb94cef9c9d3d67a50d253243aa42a4c0b8e6",
+          "ft_model_Liberty/Llama_ft/adapter_model.safetensors": "4baf93c399f1efbe75f22dc1cc611c8f7405cbfc64068e555297eb8c10255284",
+          "ft_model_Liberty/projector.pt": "5ecb8fb37528dfca98b82a4ca97925f75e7d97a17d70ae39e77d59c8cb0d7f37"
+        }
+      }
+    }
+  }
+}

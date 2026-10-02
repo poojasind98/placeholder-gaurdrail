@@ -89,15 +89,24 @@ class LogLLM(nn.Module):
         self.max_content_len = max_content_len  # max length of each log messages (contents)
         self.max_seq_len = max_seq_len   # max length of each log sequence  (log sequence contains some log messages)
         self.device = device
+        # Keep the original CUDA compute type; use fp16 for Apple Metal.
+        quantization_config = bnb_config
+        if torch.device(device).type == "mps":
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_use_double_quant=False,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16,
+            )
         self.Llama_tokenizer = AutoTokenizer.from_pretrained(Llama_path, padding_side="right")
         self.Llama_tokenizer.pad_token = self.Llama_tokenizer.eos_token
-        self.Llama_model = AutoModelForCausalLM.from_pretrained(Llama_path, quantization_config=bnb_config,
+        self.Llama_model = AutoModelForCausalLM.from_pretrained(Llama_path, quantization_config=quantization_config,
                                                            low_cpu_mem_usage=True,
-                                                           device_map=device)  # embedding dim = 4096
+                                                           device_map={"": str(device)})  # embedding dim = 4096
 
         self.Bert_tokenizer = BertTokenizerFast.from_pretrained(Bert_path, do_lower_case=True)
-        self.Bert_model = BertModel.from_pretrained(Bert_path, quantization_config=bnb_config, low_cpu_mem_usage=True,
-                                               device_map=device)
+        self.Bert_model = BertModel.from_pretrained(Bert_path, quantization_config=quantization_config, low_cpu_mem_usage=True,
+                                               device_map={"": str(device)})
 
         self.projector = nn.Linear(self.Bert_model.config.hidden_size, self.Llama_model.config.hidden_size, device=device)
         # self.projector = nn.Linear(self.Bert_model.config.hidden_size, self.Llama_model.config.hidden_size).half().to(device)
@@ -225,12 +234,9 @@ class LogLLM(nn.Module):
         answer_tokens_ids = answer_tokens['input_ids'][:, 1:]  # remove bos token
         answer_tokens_atts = answer_tokens['attention_mask'].bool()[:, 1:]
 
-        if type(self.Llama_model) == peft.peft_model.PeftModelForCausalLM:
-            instruc_embeddings = self.Llama_model.model.model.embed_tokens(self.instruc_tokens['input_ids'])
-            answer_embeddings = self.Llama_model.model.model.embed_tokens(answer_tokens_ids)
-        else:
-            instruc_embeddings = self.Llama_model.model.embed_tokens(self.instruc_tokens['input_ids'])
-            answer_embeddings = self.Llama_model.model.embed_tokens(answer_tokens_ids)
+        embed_tokens = self.Llama_model.get_input_embeddings()
+        instruc_embeddings = embed_tokens(self.instruc_tokens['input_ids'])
+        answer_embeddings = embed_tokens(answer_tokens_ids)
 
         ins1 = instruc_embeddings[0][self.instruc_tokens['attention_mask'][0].bool()]
         ins2 = instruc_embeddings[1][self.instruc_tokens['attention_mask'][1].bool()][1:]
@@ -273,12 +279,9 @@ class LogLLM(nn.Module):
         answer_prefix_tokens = self.Llama_tokenizer(prefix, padding=True, return_tensors="pt")['input_ids'][0,1:].to(
             self.device)
 
-        if type(self.Llama_model) == peft.peft_model.PeftModelForCausalLM:
-            instruc_embeddings = self.Llama_model.model.model.embed_tokens(self.instruc_tokens['input_ids'])
-            answer_prefix_tokens_embeddings = self.Llama_model.model.model.embed_tokens(answer_prefix_tokens)
-        else:
-            instruc_embeddings = self.Llama_model.model.embed_tokens(self.instruc_tokens['input_ids'])
-            answer_prefix_tokens_embeddings = self.Llama_model.model.embed_tokens(answer_prefix_tokens)
+        embed_tokens = self.Llama_model.get_input_embeddings()
+        instruc_embeddings = embed_tokens(self.instruc_tokens['input_ids'])
+        answer_prefix_tokens_embeddings = embed_tokens(answer_prefix_tokens)
 
         ins1 = instruc_embeddings[0][self.instruc_tokens['attention_mask'][0].bool()]
         ins2 = instruc_embeddings[1][self.instruc_tokens['attention_mask'][1].bool()][1:]
@@ -307,7 +310,7 @@ class LogLLM(nn.Module):
 
 
         while not this_peer_finished:
-            if len(past_key_values) == 0:
+            if past_key_values.get_seq_length() == 0:
                 # 初始轮：传完整 inputs_embeds
                 outputs = self.Llama_model(
                     inputs_embeds=inputs_embeds,
@@ -333,10 +336,7 @@ class LogLLM(nn.Module):
             answer.append(next_tokens)
 
             # obtain embedding of next token
-            if isinstance(self.Llama_model, peft.peft_model.PeftModelForCausalLM):
-                next_tokens_embeddings = self.Llama_model.model.model.embed_tokens(next_tokens)
-            else:
-                next_tokens_embeddings = self.Llama_model.model.embed_tokens(next_tokens)
+            next_tokens_embeddings = embed_tokens(next_tokens)
 
             # update attention_mask
             attention_mask = torch.cat([attention_mask, unfinished_sequences[:, None]], dim=1)

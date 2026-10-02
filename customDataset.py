@@ -50,8 +50,9 @@ def replace_patterns(text):
 
 
 class CustomDataset(Dataset):
-    def __init__(self, file_path, drop_duplicates=False):
-        df = pd.read_csv(file_path)
+    def __init__(self, file_path, drop_duplicates=False, max_samples=None):
+        # Bound the CSV read before expensive normalization for local smoke runs.
+        df = pd.read_csv(file_path, nrows=max_samples)
         print('Number of normal samples in original dataset: {}'.format((df['Label'].values==0).sum()))
         print('Number of anomalous samples in original dataset: {}'.format((df['Label'].values==1).sum()))
         df['Content'] = df['Content'].apply(replace_patterns)
